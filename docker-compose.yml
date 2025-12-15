@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # PostgreSQL сервис
+  postgres:
+    image: postgres:15-alpine
+    container_name: todo_postgres
+    environment:
+      POSTGRES_USER: todo_user
+      POSTGRES_PASSWORD: your_secure_password_123
+      POSTGRES_DB: todo_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres_init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todo_user -d todo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - todo_network
+
+  # Наше приложение
+  app:
+    build: .
+    container_name: todo_app
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://todo_user:your_secure_password_123@postgres:5432/todo_db
+      EXTERNAL_API_URL: https://jsonplaceholder.typicode.com/todos
+      BACKGROUND_TASK_INTERVAL: 300
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: >
+      sh -c "sleep 5 &&
+             uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    networks:
+      - todo_network
+
+  # pgAdmin для управления БД
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: todo_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@todo.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - todo_network
+
+# Docker volumes
+volumes:
+  postgres_data:
+
+# Docker networks
+networks:
+  todo_network:
+    driver: bridge
